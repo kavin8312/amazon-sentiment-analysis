@@ -1,0 +1,73 @@
+# app.py
+import streamlit as st
+import pickle
+import re
+import nltk
+from nltk.corpus import stopwords
+
+# ensure stopwords are available (first run will download)
+nltk.download('stopwords')
+
+st.set_page_config(page_title="Amazon Review Sentiment", page_icon="📦")
+
+# -- helper: load model & vectorizer (they should be in the repo root) --
+@st.cache_data
+def load_artifacts():
+    with open("sentiment_model.pkl", "rb") as f:
+        model = pickle.load(f)
+    with open("vectorizer.pkl", "rb") as f:
+        vectorizer = pickle.load(f)
+    return model, vectorizer
+
+model, vectorizer = load_artifacts()
+
+# prepare stopwords set
+stop_words = set(stopwords.words('english'))
+
+def clean_text(text):
+    """Do the same basic cleaning you used in Colab:
+       - lowercase
+       - remove non-letters
+       - remove stopwords
+    """
+    text = str(text).lower()
+    text = re.sub(r'[^a-z\s]', ' ', text)       # remove punctuation/numbers
+    words = [w for w in text.split() if w not in stop_words]
+    return " ".join(words)
+
+# --- UI ---
+st.title("📦 Amazon Product Review Sentiment")
+st.write("Type/paste an Amazon review and click **Predict** to see if it's Positive or Negative.")
+
+review_input = st.text_area("Enter review here:", height=160)
+
+col1, col2 = st.columns([3,1])
+with col1:
+    if st.button("Predict"):
+        if not review_input.strip():
+            st.warning("Please enter a review to predict.")
+        else:
+            cleaned = clean_text(review_input)
+            vec = vectorizer.transform([cleaned])
+            pred = model.predict(vec)[0]
+            if hasattr(model, "predict_proba"):
+                probs = model.predict_proba(vec)[0]
+            else:
+                probs = None
+
+            if pred == 1:
+                st.success("Sentiment: Positive ✅")
+            else:
+                st.error("Sentiment: Negative ❌")
+
+            if probs is not None:
+                st.write(f"Confidence → Negative: {probs[0]:.2f}, Positive: {probs[1]:.2f}")
+
+with col2:
+    if st.button("Try example"):
+        st.experimental_set_query_params()  # keeps UI responsive
+        st.write("Example loaded below:")
+        st.code("This product is amazing and works perfectly!")
+
+st.markdown("---")
+st.caption("Model and vectorizer should be in the repository root: sentiment_model.pkl and vectorizer.pkl")
